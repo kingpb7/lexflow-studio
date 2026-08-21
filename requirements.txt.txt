@@ -1,5 +1,0 @@
-streamlit
-docxtpl
-python-docx
-jinja2
-lxml
