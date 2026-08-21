@@ -4,3 +4,5 @@ python-docx
 jinja2
 lxml
 pandas
+openpyxl
+pypdf
