@@ -170,7 +170,7 @@ else:
 
 		st.write("---")
 		st.subheader("Acceso Rápido")
-		url_de_tu_app = "https://tu-enlace.streamlit.app"
+		url_de_tu_app = "https://lexflow-studio-swevxvvgzyq2cspa3auema.streamlit.app/"
 		contenido_url = f"[InternetShortcut]\nURL={url_de_tu_app}\nIconIndex=0"
 		st.download_button(
 			"Descargar Acceso Directo (PC)",
