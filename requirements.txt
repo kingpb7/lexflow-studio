@@ -1,8 +1,5 @@
 streamlit
-docxtpl
-python-docx
-jinja2
-lxml
+google-genai
+pypdf
 pandas
 openpyxl
-pypdf
