@@ -1,5 +1,5 @@
 streamlit
-google-genai
 pypdf
 pandas
 openpyxl
+python-docx
