@@ -25,108 +25,133 @@ if 'usuario_actual' not in st.session_state:
 if 'rol_actual' not in st.session_state:
     st.session_state.rol_actual = None
 
-# --- MOTOR LOCAL DE EXTRACCIÓN (ALGORITMO PARA FORMATO HONDUREÑO) ---
+# --- MOTOR LOCAL DE EXTRACCIÓN (BASADO EN TU FORMATO DE WORD) ---
 def extraer_datos_precisos(texto):
-    # Usamos el texto original y una versión limpia para diferentes búsquedas
     texto_limpio = texto.replace('\n', ' ')
     
-    # 1. Identidad Hondureña (13 dígitos)
+    # 1. Identidad (13 dígitos)
     id_match = re.search(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{5}\b', texto_limpio)
-    identidad = id_match.group(0).strip() if id_match else "No detectada"
+    identidad = id_match.group(0).strip() if id_match else "Sin_Identidad"
     
-    # 2. Nombre (Busca la estructura clásica: "Yo, [NOMBRE], mayor de edad")
-    nombre = "No detectado"
+    # 2. Nombre (Busca "Yo, [NOMBRE], mayor de edad")
+    nombre = "Sin_Nombre"
     nombre_match = re.search(r'Yo,\s*([A-ZÁÉÍÓÚÑa-záéíóúñ\s]+?),\s*mayor\s+de\s+edad', texto_limpio, re.IGNORECASE)
     if nombre_match:
         nombre = nombre_match.group(1).strip()
     else:
-        # Respaldo por si el nombre está al final (Firma)
         nombre_firma = re.search(r'Firma[:\s_]+([A-ZÁÉÍÓÚÑ\s]+)', texto_limpio, re.IGNORECASE)
         if nombre_firma:
             nombre = nombre_firma.group(1).strip()
 
-    # 3. Juzgado (Busca "SEÑOR JUEZ DE..." o "JUZGADO...")
-    juzgado = "No detectado"
+    # 3. Juzgado (Busca "SEÑOR JUEZ..." o "JUZGADO...")
+    juzgado = "Juzgado_General"
     juzgado_match = re.search(r'(SEÑOR JUEZ[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+|JUZGADO[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+)(?=\.|,)', texto_limpio, re.IGNORECASE)
     if juzgado_match:
         juzgado = juzgado_match.group(0).strip()
-        # Cortamos si captura demasiado texto por error
-        if len(juzgado) > 90:
-            juzgado = juzgado[:90] + "..."
+        if len(juzgado) > 60:
+            juzgado = juzgado[:60]
             
-    # 4. Año (Buscamos el último año mencionado, suele ser el de la firma/presentación)
-    anio = "No detectado"
+    # 4. Año
+    anio = "Sin_Anio"
     anios = re.findall(r'\b(20\d{2})\b', texto_limpio)
     if anios:
         anio = anios[-1] 
         
-    return {"Nombre": nombre, "Identidad": identidad, "Año": anio, "Juzgado": juzgado}
+    # Limpiar caracteres especiales para nombres de archivos seguros en Windows/Linux
+    nombre_seguro = re.sub(r'[\\/*?:"<>|]', "", nombre)
+    juzgado_seguro = re.sub(r'[\\/*?:"<>|]', "", juzgado)
+    
+    return {
+        "Nombre": nombre, 
+        "Identidad": identidad, 
+        "Año": anio, 
+        "Juzgado": juzgado,
+        "Nombre_Archivo": f"{nombre_seguro} - {juzgado_seguro} - {identidad} - {anio}"
+    }
 
-# --- REDACTOR DE DEMANDAS LOCAL (PLANTILLAS CPC HONDURAS) ---
-def generar_plantilla_demanda(tipo, actor, identidad_actor, juzgado, demandado, cuantia, hechos):
-    fecha_hoy = datetime.datetime.now().strftime("%d de %B de %Y")
-    plantilla = f"""SUMA: SE INTERPONE {tipo.upper()}. SE ACOMPAÑAN DOCUMENTOS. PETICIÓN.
+# --- REDACTOR BASADO EN LA MATRIZ DE TU WORD ---
+def generar_documento_word_demanda(tipo, actor, identidad_actor, juzgado, demandado, cuantia, hechos, abogado):
+    doc = docx.Document()
+    
+    # Encabezado / Suma
+    doc.add_paragraph(f"SEÑOR JUEZ DE {juzgado.upper()}.")
+    doc.add_paragraph(f"SE INTERPONE {tipo.upper()}. - SE ACOMPAÑAN DOCUMENTOS.- SE OTORGA PODER.")
+    doc.add_paragraph()
+    
+    # Cuerpo Principal con tu misma estructura formal
+    cuerpo = (
+        f"Yo, {actor}, mayor de edad, con Documento Nacional de Identificación (DNI) No. {identidad_actor}, "
+        f"actuando en mi propia condición; con el debido respeto comparezco ante usted, Señor Juez, interponiendo "
+        f"{tipo.upper()} en contra del señor(a) {demandado}. La presente demanda se basa en los siguientes hechos y fundamentos de derecho:"
+    )
+    doc.add_paragraph(cuerpo)
+    
+    # Hechos
+    doc.add_heading("HECHOS", level=2)
+    doc.add_paragraph(f"PRIMERO: {hechos}")
+    doc.add_paragraph("SEGUNDO: Es el caso, Señor Juez, que la parte demandada ha incumplido con sus obligaciones, motivando la presente acción judicial.")
+    doc.add_paragraph("TERCERO: Ante la negativa de honrar la obligación contraída, me veo en la necesidad de recurrir a este órgano jurisdiccional.")
+    
+    # Medios de Prueba
+    doc.add_heading("MEDIOS DE PRUEBA", level=2)
+    doc.add_paragraph("1. DOCUMENTAL PRIVADA: Consistente en los documentos acompañados al presente escrito.")
+    doc.add_paragraph("2. INTERROGATORIO DE LAS PARTES.")
+    
+    # Fundamentos de Derecho
+    doc.add_heading("FUNDAMENTOS DE DERECHO", level=2)
+    doc.add_paragraph("Fundo la presente demanda en los Artículos constitucionales aplicables y las disposiciones civiles y procesales pertinentes sobre obligaciones y contratos.")
+    
+    # Otorgamiento de Poder
+    if abogado:
+        doc.add_heading("OTORGAMIENTO DE PODER", level=2)
+        doc.add_paragraph(f"Para que me represente, otorgo Poder Especial al Abogado(a) {abogado}, con inscripción profesional vigente, investido(a) de las facultades generales y especiales del mandato judicial.")
+    
+    # Petición
+    doc.add_heading("PETICIÓN", level=2)
+    doc.add_paragraph("A usted, Señor Juez, respetuosamente PIDO:\n1. Admitir la presente Demanda junto con los documentos acompañados.\n2. Tener por acreditado el Poder otorgado en su caso.\n3. Emplazar a la parte demandada.\n4. En sentencia definitiva, declarar CON LUGAR la demanda.")
+    
+    fecha_hoy = datetime.datetime.now().strftime("Tegucigalpa, M.D.C., a los %d días del mes de %B de %Y.")
+    doc.add_paragraph(fecha_hoy)
+    doc.add_paragraph(f"___________________________________________\n{actor}\nDNI: {identidad_actor}")
+    
+    # Guardar en memoria BytesIO
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
 
-SEÑOR JUEZ DEL {juzgado.upper()}
-
-Yo, {actor.upper()}, mayor de edad, hondureño(a), con Documento Nacional de Identificación (DNI) No. {identidad_actor}, actuando en mi propia condición; con el debido respeto comparezco ante usted interponiendo {tipo.upper()} en contra del señor(a) {demandado.upper()}.
-
-I. GENERALIDADES DE LAS PARTES
-Parte Demandante: {actor}, con DNI {identidad_actor}.
-Parte Demandada: {demandado}.
-Cuantía de la pretensión: {cuantia} Lempiras.
-
-II. RELACIÓN DE HECHOS (CRONOLÓGICOS)
-{hechos}
-
-III. FUNDAMENTOS DE DERECHO
-Fundo la presente acción en lo establecido en el Código Procesal Civil de Honduras, garantizando el derecho a la tutela judicial efectiva y el debido proceso.
-
-IV. PETICIÓN
-Al señor Juez, respetuosamente PIDO:
-1. Admitir el presente escrito.
-2. Darle el trámite correspondiente conforme a ley.
-3. En definitiva, dictar sentencia favorable a mis intereses.
-
-Tegucigalpa, M.D.C., a los {fecha_hoy}.
-
-___________________________
-Firma: {actor}
-DNI: {identidad_actor}
-"""
-    return plantilla
-
-# --- REGISTRO EN HISTORIAL PRIVADO ---
+# --- HISTORIAL Y ZIP ---
 def guardar_en_historial(correo, tipo, detalle):
     if correo not in st.session_state.historial_usuario:
         st.session_state.historial_usuario[correo] = []
     fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     st.session_state.historial_usuario[correo].append({"fecha": fecha_actual, "tipo": tipo, "detalle": detalle})
 
-# --- GENERADOR DE ARCHIVO ZIP ORDENADO ---
-def crear_paquete_zip(dataframe_resultados, lista_fichas):
+def crear_paquete_zip_con_words(dataframe_resultados, lista_fichas_datos):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        # 1. Archivo maestro Excel con la tabla de agrupación
+        # 1. Excel Maestro
         excel_buffer = io.BytesIO()
         dataframe_resultados.to_excel(excel_buffer, index=False)
         zip_file.writestr("Reporte_General_Agrupacion.xlsx", excel_buffer.getvalue())
         
-        # 2. Carpeta virtual organizada con las fichas
-        for ficha in lista_fichas:
-            nombre_limpio = ficha['archivo'].replace('.pdf', '').replace('.xlsx', '').replace('.docx', '')
-            contenido = f"""EXPEDIENTE ORDENADO - LEXFLOW STUDIO
-----------------------------------------
-Archivo Original: {ficha['archivo']}
-Estado: Procesado Localmente
-
---- DATOS EXTRAÍDOS ---
-Juzgado Competente: {ficha['datos']['Juzgado']}
-Nombre Detectado: {ficha['datos']['Nombre']}
-Identidad / DNI: {ficha['datos']['Identidad']}
-Año: {ficha['datos']['Año']}
-"""
-            zip_file.writestr(f"expedientes_ordenados/{nombre_limpio}_ficha.txt", contenido)
+        # 2. Generar un documento Word ordenado por cada expediente analizado
+        for item in lista_fichas_datos:
+            doc_ind = docx.Document()
+            doc_ind.add_heading("EXPEDIENTE ORDENADO - LEXFLOW STUDIO", level=1)
+            doc_ind.add_paragraph(f"Archivo Original Analizado: {item['archivo']}")
+            doc_ind.add_heading("Datos Extraídos:", level=2)
+            doc_ind.add_paragraph(f"• Nombre: {item['datos']['Nombre']}")
+            doc_ind.add_paragraph(f"• Juzgado: {item['datos']['Juzgado']}")
+            doc_ind.add_paragraph(f"• Número de Identidad: {item['datos']['Identidad']}")
+            doc_ind.add_paragraph(f"• Año: {item['datos']['Año']}")
+            
+            doc_bytes = io.BytesIO()
+            doc_ind.save(doc_bytes)
+            doc_bytes.seek(0)
+            
+            nombre_archivo_zip = f"expedientes_ordenados/{item['datos']['Nombre_Archivo']}.docx"
+            zip_file.writestr(nombre_archivo_zip, doc_bytes.getvalue())
             
     zip_buffer.seek(0)
     return zip_buffer
@@ -141,18 +166,18 @@ def panel_administracion():
         st.header("👥 Gestión de Usuarios Pendientes")
         pendientes = [correo for correo, datos in st.session_state.users_db.items() if datos["status"] == "Pendiente"]
         if not pendientes:
-            st.info("No hay solicitudes pendientes en este momento.")
+            st.info("No hay solicitudes pendientes.")
         else:
             for correo in pendientes:
                 col_a, col_b, col_c = st.columns([3, 1, 1])
                 col_a.write(f"**Usuario:** {correo}")
                 if col_b.button("✅ Aceptar", key=f"aceptar_{correo}"):
                     st.session_state.users_db[correo]["status"] = "Aprobado"
-                    st.success(f"Usuario aprobado.")
+                    st.success("Aprobado.")
                     st.rerun()
                 if col_c.button("❌ Rechazar", key=f"rechazar_{correo}"):
                     del st.session_state.users_db[correo]
-                    st.warning(f"Solicitud rechazada.")
+                    st.warning("Rechazado.")
                     st.rerun()
     elif menu_admin == "Ver / Eliminar Usuarios":
         st.header("📋 Base de Datos de Usuarios")
@@ -163,108 +188,115 @@ def panel_administracion():
                 col_2.write(f"Estado: {datos['status']}")
                 if col_3.button("🗑️ Eliminar", key=f"del_{correo}"):
                     del st.session_state.users_db[correo]
-                    if correo in st.session_state.historial_usuario:
-                        del st.session_state.historial_usuario[correo]
-                    st.error(f"Usuario eliminado.")
+                    st.error("Eliminado.")
                     st.rerun()
 
 # --- CENTRO DE COMANDO PRINCIPAL ---
 def centro_de_comando_principal(correo_usuario):
-    st.title("⚖️ LexFlow Studio - Centro Jurídico (Modo Rápido)")
+    st.title("⚖️ LexFlow Studio - Sistema Jurídico")
     st.write(f"Bienvenido, **{correo_usuario}**")
 
     pestana_lote, pestana_redactor, pestana_historial = st.tabs([
-        "📁 Agrupación Masiva (Word/PDF/Excel)", 
-        "✍️ Redactor de Demandas (Honduras)", 
+        "📁 Agrupación y Carpeta Word Ordenada", 
+        "✍️ Redactor Procesal Matriz", 
         "🔒 Historial Privado"
     ])
 
-    # --- PESTAÑA 1: CARGA MASIVA ---
+    # --- PESTAÑA 1: CARGA MASIVA Y WORD ORDENADOS ---
     with pestana_lote:
-        st.subheader("Análisis y Extracción Inmediata")
+        st.subheader("Agrupación Masiva y Generación de Documentos Word Ordenados")
+        st.info("Sube tus expedientes. El sistema generará una carpeta ZIP con un reporte Excel y un archivo Word por cada caso, nombrados bajo el formato: [Nombre] - [Juzgado] - [Identidad] - [Año].")
+        
         archivos_subidos = st.file_uploader(
-            "Sube tus expedientes (Word, PDF o Excel)", 
+            "Sube tus archivos (Word, PDF o Excel)", 
             type=["pdf", "xlsx", "xls", "docx"], 
             accept_multiple_files=True
         )
         
         if archivos_subidos:
-            if st.button("⚡ Agrupar y Generar Carpeta Descargable"):
-                with st.spinner("Procesando documentos..."):
+            if st.button("⚡ Procesar, Ordenar y Crear Carpeta ZIP"):
+                with st.spinner("Generando documentos ordenados a alta velocidad..."):
                     resultados_tabla = []
                     lista_fichas = []
                     
                     for archivo in archivos_subidos:
                         texto_doc = ""
-                        
-                        # Lectura de PDF
                         if archivo.name.endswith('.pdf'):
                             lector = PdfReader(archivo)
                             for i, pagina in enumerate(lector.pages):
-                                if i < 3: 
+                                if i < 3:
                                     t = pagina.extract_text()
                                     if t: texto_doc += t + " "
-                                    
-                        # Lectura de Word
                         elif archivo.name.endswith('.docx'):
                             doc = docx.Document(archivo)
                             texto_doc = " ".join([para.text for para in doc.paragraphs])
-                            
-                        # Lectura de Excel
                         elif archivo.name.endswith(('.xlsx', '.xls')):
                             df = pd.read_excel(archivo)
                             texto_doc = " ".join(df.astype(str).values.flatten())
                         
-                        # Extraer datos exactos
                         datos_extraidos = extraer_datos_precisos(texto_doc)
                         
-                        fila = {"Archivo": archivo.name}
-                        fila.update(datos_extraidos)
+                        fila = {"Archivo Original": archivo.name}
+                        fila.update({
+                            "Nombre": datos_extraidos["Nombre"],
+                            "Juzgado": datos_extraidos["Juzgado"],
+                            "Identidad": datos_extraidos["Identidad"],
+                            "Año": datos_extraidos["Año"]
+                        })
                         resultados_tabla.append(fila)
-                        
                         lista_fichas.append({"archivo": archivo.name, "datos": datos_extraidos})
                     
-                    # Mostrar tabla
                     df_resultados = pd.DataFrame(resultados_tabla)
-                    st.markdown("### 📊 Resultado de la Agrupación:")
+                    st.markdown("### 📊 Tabla de Datos Agrupados:")
                     st.dataframe(df_resultados, use_container_width=True)
                     
-                    # Crear ZIP
-                    paquete_zip = crear_paquete_zip(df_resultados, lista_fichas)
+                    # Paquete ZIP con archivos Word formateados
+                    paquete_zip = crear_paquete_zip_con_words(df_resultados, lista_fichas)
                     
                     st.markdown("---")
-                    st.success("¡Carpeta de expedientes ordenados lista!")
+                    st.success("¡Carpeta comprimida generada con éxito!")
                     st.download_button(
-                        label="📦 Descargar Carpeta ZIP con Excel y Expedientes",
+                        label="📦 Descargar Carpeta ZIP con Word y Excel Ordenados",
                         data=paquete_zip,
                         file_name="Expedientes_Ordenados_LexFlow.zip",
                         mime="application/zip",
                         use_container_width=True
                     )
-                    guardar_en_historial(correo_usuario, "Agrupación Masiva", f"Procesados {len(archivos_subidos)} archivos.")
+                    guardar_en_historial(correo_usuario, "Agrupación Masiva con Word", f"Procesados {len(archivos_subidos)} archivos.")
 
-    # --- PESTAÑA 2: REDACTOR DE DEMANDAS ---
+    # --- PESTAÑA 2: REDACTOR MATRIZ ---
     with pestana_redactor:
-        st.subheader("Redacción Procesal Estructurada")
+        st.subheader("Redacción de Escritos basada en Estructura Matriz")
+        st.info("Crea un documento formal respetando exactamente la estructura institucional del formato base.")
+        
         col1, col2 = st.columns(2)
         with col1:
-            tipo = st.selectbox("Tipo de Escrito", ["Demanda Civil (Proceso Ordinario)", "Demanda Laboral", "Solicitud de Medidas"])
+            tipo = st.selectbox("Tipo de Escrito", ["Demanda Ordinaria Civil", "Demanda Laboral", "Solicitud de Medidas Cautelares"])
             actor = st.text_input("Nombre del Demandante / Actor")
             identidad_actor = st.text_input("DNI del Demandante")
+            abogado = st.text_input("Nombre del Abogado(a) Apoderado")
         with col2:
-            juzgado = st.text_input("Juzgado Competente", placeholder="Ej: Juzgado de Letras de lo Civil...")
+            juzgado = st.text_input("Juzgado Competente", placeholder="Ej: de Letras Civil de Francisco Morazán")
             demandado = st.text_input("Nombre del Demandado")
-            cuantia = st.text_input("Cuantía (Lempiras)")
+            cuantia = st.text_input("Cuantía Pretendida")
             
-        hechos = st.text_area("Relación de Hechos", placeholder="Redacta cronológicamente...")
+        hechos = st.text_area("Relación de Hechos Principal", placeholder="Redacta el hecho primero o descripción central...")
         
-        if st.button("⚡ Generar Escrito"):
+        if st.button("⚡ Generar y Descargar Documento Word"):
             if actor and demandado and hechos and juzgado:
-                borrador = generar_plantilla_demanda(tipo, actor, identidad_actor, juzgado, demandado, cuantia, hechos)
-                st.text_area("Borrador Procesal Oficial:", value=borrador, height=550)
-                guardar_en_historial(correo_usuario, f"Redactó {tipo}", f"{actor} vs {demandado}")
+                word_buffer = generar_documento_word_demanda(tipo, actor, identidad_actor, juzgado, demandado, cuantia, hechos, abogado)
+                
+                st.success("¡Escrito generado correctamente bajo el formato matriz!")
+                st.download_button(
+                    label="📥 Descargar Escrito en Formato Word (.docx)",
+                    data=word_buffer,
+                    file_name=f"{tipo.replace(' ', '_')}_{actor}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
+                guardar_en_historial(correo_usuario, f"Redacción Matriz {tipo}", f"{actor} vs {demandado}")
             else:
-                st.warning("Completa Demandante, Demandado, Juzgado y Hechos.")
+                st.warning("Completa los campos principales (Demandante, Demandado, Juzgado y Hechos).")
 
     # --- PESTAÑA 3: HISTORIAL ---
     with pestana_historial:
